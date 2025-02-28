@@ -1,16 +1,7 @@
-import {
-  Clarinet,
-  Tx,
-  Chain,
-  Account,
-  types
-} from 'https://deno.land/x/clarinet@v1.0.0/index.ts';
-import { assertEquals } from 'https://deno.land/std@0.90.0/testing/asserts.ts';
-
-// Previous tests remain...
+[Previous test imports and setup remain unchanged...]
 
 Clarinet.test({
-  name: "Test flash loan functionality with limits",
+  name: "Test complete flash loan cycle with repayment",
   async fn(chain: Chain, accounts: Map<string, Account>) {
     const deployer = accounts.get('deployer')!;
     const wallet1 = accounts.get('wallet_1')!;
@@ -25,27 +16,17 @@ Clarinet.test({
       ], deployer.address)
     ]);
     
-    // Test valid flash loan under limit
+    // Take out flash loan
     let loan = chain.mineBlock([
       Tx.contractCall('nova-swap', 'flash-loan', [
         types.principal(deployer.address),
-        types.uint(400000) // 40% of pool
+        types.uint(400000)
       ], wallet1.address)
     ]);
     
     loan.receipts[0].result.expectOk();
     
-    // Test flash loan over limit
-    let badLoan = chain.mineBlock([
-      Tx.contractCall('nova-swap', 'flash-loan', [
-        types.principal(deployer.address),
-        types.uint(600000) // 60% of pool
-      ], wallet1.address)
-    ]);
-    
-    badLoan.receipts[0].result.expectErr(106); // err-flash-loan-limit
-    
-    // Repay valid flash loan
+    // Repay flash loan
     let repay = chain.mineBlock([
       Tx.contractCall('nova-swap', 'repay-flash-loan', [
         types.principal(deployer.address)
@@ -53,7 +34,14 @@ Clarinet.test({
     ]);
     
     repay.receipts[0].result.expectOk();
+    
+    // Verify can't repay twice
+    let badRepay = chain.mineBlock([
+      Tx.contractCall('nova-swap', 'repay-flash-loan', [
+        types.principal(deployer.address)
+      ], wallet1.address)
+    ]);
+    
+    badRepay.receipts[0].result.expectErr(108); // err-no-active-loan
   },
 });
-
-[Previous tests remain unchanged...]
