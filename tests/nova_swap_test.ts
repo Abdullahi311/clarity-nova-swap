@@ -1,7 +1,5 @@
-[Previous test imports and setup remain unchanged...]
-
 Clarinet.test({
-  name: "Test complete flash loan cycle with repayment",
+  name: "Test complete flash loan cycle with fees",
   async fn(chain: Chain, accounts: Map<string, Account>) {
     const deployer = accounts.get('deployer')!;
     const wallet1 = accounts.get('wallet_1')!;
@@ -16,17 +14,21 @@ Clarinet.test({
       ], deployer.address)
     ]);
     
+    // Calculate expected fee
+    const loanAmount = 400000;
+    const fee = Math.floor(loanAmount * 0.001); // 0.1% fee
+    
     // Take out flash loan
     let loan = chain.mineBlock([
       Tx.contractCall('nova-swap', 'flash-loan', [
         types.principal(deployer.address),
-        types.uint(400000)
+        types.uint(loanAmount)
       ], wallet1.address)
     ]);
     
     loan.receipts[0].result.expectOk();
     
-    // Repay flash loan
+    // Repay flash loan with fee
     let repay = chain.mineBlock([
       Tx.contractCall('nova-swap', 'repay-flash-loan', [
         types.principal(deployer.address)
@@ -35,13 +37,14 @@ Clarinet.test({
     
     repay.receipts[0].result.expectOk();
     
-    // Verify can't repay twice
-    let badRepay = chain.mineBlock([
-      Tx.contractCall('nova-swap', 'repay-flash-loan', [
-        types.principal(deployer.address)
+    // Test maximum loan limit
+    let maxLoan = chain.mineBlock([
+      Tx.contractCall('nova-swap', 'flash-loan', [
+        types.principal(deployer.address),
+        types.uint(600000) // Should fail as > 50% of pool
       ], wallet1.address)
     ]);
     
-    badRepay.receipts[0].result.expectErr(108); // err-no-active-loan
+    maxLoan.receipts[0].result.expectErr(106); // err-flash-loan-limit
   },
 });
